@@ -1,0 +1,31 @@
+name: Build
+on:
+  push:
+    branches:
+      - "master"
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container:
+      image: gradle:8-jdk17
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+          cache: 'gradle'
+      - name: Gradle Build
+        run: gradle shadowJar
+      - name: Auto Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: false
+          title: "Build"
+          files: |
+            build/libs/TransferTool-*.jar

@@ -46,7 +46,7 @@ To add more transfer mappings, create a new line - just like in the example.
 Note for ipv6 addresses, you'll need to wrap the ipv6 with square brackets (see [here](https://en.wikipedia.org/wiki/IPv6_address#Literal_IPv6_addresses_in_network_resource_identifiers))
 
 Note:
-If you enable `forward-original-target` and also provide server mappings, the server mappings will be checked first (and override the Java IP/port provided with the mapped destination.
+If you enable `forward-original-target` and also provide server mappings, the server mappings will be checked first (and override the Java IP/port provided with the mapped Bedrock destination).
 
 # Installation
 To install this Geyser extension, download the TransferTool.jar from the Releases tab, and add it to Geyser's extension folder.

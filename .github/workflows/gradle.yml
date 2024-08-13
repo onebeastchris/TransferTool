@@ -26,6 +26,6 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
           prerelease: false
-          title: "Build"
+          title: "Download here"
           files: |
-            build/libs/TransferTool-*.jar
+            build/libs/TransferTool.jar

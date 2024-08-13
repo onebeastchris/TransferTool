@@ -1,5 +1,6 @@
 plugins {
     java
+    id("io.freefair.lombok") version "8.4"
     id("io.github.goooler.shadow") version "8.1.7"
 }
 
@@ -10,7 +11,7 @@ repositories {
 
 dependencies {
     // Geyser API - needed for all extensions
-    compileOnly("org.geysermc.geyser:api:2.3.1-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:api:2.4.1-SNAPSHOT")
 
     // Include other dependencies here - e.g. for configuration.
     implementation("org.spongepowered:configurate-hocon:4.1.2")

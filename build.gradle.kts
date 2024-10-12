@@ -33,6 +33,7 @@ tasks {
     }
 
     jar {
+        archiveBaseName.set("DEV-TransferTool")
         archiveClassifier.set("unshaded")
     }
 

@@ -1,6 +1,6 @@
 id: transfertool
 name: TransferTool
-main: net.onebeastchris.extension.transfertool.TransferTool
+main: dev.onechris.extension.transfertool.TransferTool
 api: 2.4.1
-version: 1.0.0
+version: 1.1.0
 authors: [onebeastchris]

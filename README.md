@@ -13,33 +13,56 @@ to transfer players to upon Geyser receives a Java transfer packet.
 *unless Geyser is also running on the same Java port, but that's not always the case.
 
 # Configuration
-There are currently two configuration options:
-- `forwardOriginalTarget` (boolean; possible values true/false): <br>
+There are two main configuration options:
+- `forward-original-target` (boolean; possible values true/false): <br>
     Forwards the IP/port combination received from the Java server directly to the Bedrock client. 
 This would only be useful in the case where the Java server already accounts for the receiver to be a Geyser player,
 and is already sending a Geyser server IP/port to connect to.
 
-- `transferMappings` (Map, String -> String) <br>
+- `transfer-mappings` (Map, String -> String) <br>
     Maps a Java IP/port combination to a Bedrock IP/port combination. To represent a IP/address combination, 
 use the following format: `example.com:12892`, or `198.51.100.0:13132`. Alternatively, you can leave out the port,
 this would fall back to the default Java/Bedrock ports (25565 for Java, and 19132 for Bedrock).
 
+Further, there is an option to add a Bedrock-only `/transfer` command. If enabled, Bedrock players can:
+- Transfer to pre-defined servers (set in `transfer-shortcuts`) by running '/transfer <server>'
+- Transfer to any server - if they have the `transfertool.command.transfer.any` permission. Usage:
+`/transfer test.geysermc.org` or `/transfer test.geysermc.org:19132` or `/transfer test.geysermc.org 19132`
+
 Example config:
-```
-# TranferTool Configuration
+```yaml
+# TransferTool Configuration
+# 
+# Documentation: https://onechris.dev/docs/extensions/transfertool/
+# Source: https://github.com/onebeastchris/TransferTool/
 
-# Whether to pass the IP/port sent by the Java server to the Bedrock client.
-# This option will only work properly if the Java server already accounts for Geyser clients
-# when sending transfer requests.
-forward-original-target=false
+#  Whether to pass the IP/Port sent by the Java server to the Bedrock client.
+#  This option will only work properly if the Java server already accounts for Geyser clients
+#  when sending transfer requests.
+forward-original-target: false
 
-# A map of Java IP/port combinations to Geyser IP/port combinations.
-# If you do not specify a port with a ":<port>" addition,
-# it will use the default ports for Bedrock/Java respectively.
-transfer-mappings {
-    "127.0.0.1:25565"="127.0.0.1:19132"
-    "javaip.com"="bedrockip.com"
-}
+#  A map of Java IP/Port combinations to Geyser IP/Port combinations.
+#  If you do not specify a port with a ":<port>" addition,
+#  it will use the default ports for Bedrock/Java respectively.
+transfer-mappings:
+    127.0.0.1:25565: 127.0.0.1:19132
+    javaip.com: bedrockip.com
+
+#  Whether to add a '/transfertool transfer <server>' command to the server that can only be used by Bedrock players.
+#  This uses the "server-names" below. Command permission: "transfertool.command.transfer".
+
+#  Alternatively, users can transfer to any IP and Port combination if they additionally have the
+#  "transfertool.command.transfer.any" permission.
+add-transfer-command: false
+
+#  Allows configuring shortcuts for servers to use in the optional '/transfer <server>' command.
+#  Has no use while "add-transfer-command" is false.
+transfer-shortcuts:
+    lobby: bedrockip.com
+    vanilla: 127.0.0.1:19132
+
+# The config version. DO NOT CHANGE!
+version: 1
 ```
 
 To add more transfer mappings, create a new line - just like in the example.

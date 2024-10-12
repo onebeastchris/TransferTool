@@ -1,8 +1,9 @@
-name: Build
+name: Build and Release
 on:
   push:
     branches:
-      - "master"
+      - "main"
+
 jobs:
   build:
     name: Build
@@ -11,21 +12,30 @@ jobs:
       image: gradle:8-jdk17
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
+
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'adopt'
           cache: 'gradle'
+
       - name: Gradle Build
-        run: gradle shadowJar
-      - name: Auto Release
-        uses: "marvinpinto/action-automatic-releases@latest"
+        run: gradle build
+
+      - name: Release
+        uses: GeyserMC/actions/release@master
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: false
-          title: "Download here"
           files: |
-            build/libs/TransferTool.jar
+            build/libs/TransferTool-*.jar
+          appID: ${{ secrets.RELEASE_APP_ID }}
+          appPrivateKey: ${{ secrets.RELEASE_APP_PK }}
+          saveMetadata: true
+          releaseEnabled: true
+          discordWebhook: ${{ secrets.DISCORD_WEBHOOK }}
+          ghReleaseNotes: true
+          releaseName: Build ${tagBase}
+          tagPrefix: release
+          tagIncrement: true
+          preRelease: false

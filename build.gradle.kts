@@ -1,8 +1,10 @@
 plugins {
     java
     id("io.freefair.lombok") version "8.4"
-    id("io.github.goooler.shadow") version "8.1.7"
+    id("com.gradleup.shadow") version "8.3.3"
 }
+
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -14,7 +16,9 @@ dependencies {
     compileOnly("org.geysermc.geyser:api:2.4.1-SNAPSHOT")
 
     // Include other dependencies here - e.g. for configuration.
+    // TODO remove
     implementation("org.spongepowered:configurate-hocon:4.1.2")
+    implementation("org.spongepowered:configurate-yaml:4.2.0-GeyserMC-SNAPSHOT")
 }
 
 java {
@@ -34,9 +38,10 @@ tasks {
 
     shadowJar {
         archiveClassifier.set("")
-        relocate("org.spongepowered.configurate", "net.onebeastchris.relocate.configurate")
-        relocate("io.leangen.geantyref", "net.onebeastchris.relocate.geantyref")
-        relocate("com.typesafe.config", "net.onebeastchris.relocate.typesafe")
+        archiveVersion.set(version.toString())
+        relocate("org.spongepowered.configurate", "dev.onechris.extension.transfertool.relocate.configurate")
+        relocate("io.leangen.geantyref", "dev.onechris.extension.transfertool.relocate.geantyref")
+        relocate("com.typesafe.config", "dev.onechris.extension.transfertool.relocate.typesafe")
     }
 }
 

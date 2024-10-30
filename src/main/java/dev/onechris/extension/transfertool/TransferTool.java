@@ -1,5 +1,7 @@
 package dev.onechris.extension.transfertool;
 
+import org.geysermc.cumulus.form.CustomForm;
+import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.event.subscribe.Subscribe;
 import org.geysermc.geyser.api.command.Command;
 import org.geysermc.geyser.api.command.CommandSource;
@@ -16,25 +18,26 @@ import org.geysermc.geyser.api.util.TriState;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 public class TransferTool implements Extension {
-    private static ExtensionLogger logger;
+    static ExtensionLogger logger;
     private Map<Destination, Destination> transferMappings = new HashMap<>();
     private Map<String, Destination> serverShortcuts = new HashMap<>();
-    private boolean followJavaTransfer = false;
-    private boolean registerTransferCommand = false;
+    private Config config;
+    private LanguageManager languageManager;
 
     @Subscribe
     public void onEnable(GeyserPreInitializeEvent ignored) {
         logger = this.logger();
         loadConfig();
+        loadLanguageManager();
     }
 
     @Subscribe
     public void onReload(GeyserPreReloadEvent ignored) {
         logger.info("Reloading config!");
         loadConfig();
+        loadLanguageManager();
     }
 
     @Subscribe
@@ -45,10 +48,10 @@ public class TransferTool implements Extension {
         Destination bedrockTarget = transferMappings.get(target);
         if (bedrockTarget != null) {
             logger.debug(String.format("Transferring %s to %s based on transfer mapping", event.connection().name(), bedrockTarget));
-            event.bedrockPort(bedrockTarget.port);
-            event.bedrockHost(bedrockTarget.ip);
+            event.bedrockPort(bedrockTarget.port());
+            event.bedrockHost(bedrockTarget.ip());
             return;
-        } else if (followJavaTransfer) {
+        } else if (config.forwardOriginalTarget()) {
             logger.debug(String.format("Transferring %s to %s due to java transfer forwarding", event.connection().name(), bedrockTarget));
             event.bedrockHost(event.host());
             event.bedrockPort(event.port());
@@ -62,9 +65,13 @@ public class TransferTool implements Extension {
     public void registerPermissions(GeyserRegisterPermissionsEvent event) {
         event.register("transfertool.command.reload", TriState.NOT_SET);
 
-        if (registerTransferCommand) {
+        if (config.addTransferCommand()) {
             event.register("transfertool.command.transfer", TriState.TRUE);
             event.register("transfertool.command.transfer.any", TriState.NOT_SET);
+
+            for (var shortcut : serverShortcuts.keySet()) {
+                event.register("transfertool.shortcuts." + shortcut, TriState.TRUE);
+            }
         }
     }
 
@@ -73,18 +80,18 @@ public class TransferTool implements Extension {
         event.register(
                 Command.builder(this)
                     .name("reload")
-                    .description("Reloads the TransferTool configuration")
+                    .description(languageManager.getLocaleString("commands.reload.desc"))
                     .permission("transfertool.command.reload")
                     .source(CommandSource.class)
                     .executor(($, $$, $$$) -> onReload(null))
                     .build()
         );
 
-        if (registerTransferCommand) {
+        if (config.addTransferCommand()) {
             event.register(
                 Command.<GeyserConnection>builder(this)
                     .name("transfer")
-                    .description("Transfers you to a another server.")
+                    .description(languageManager.getLocaleString("commands.transfer.desc"))
                     .bedrockOnly(true)
                     .playerOnly(true)
                     .permission("transfertool.command.transfer")
@@ -98,27 +105,69 @@ public class TransferTool implements Extension {
     private void handleArgs(GeyserConnection source, Command command, String[] args) {
         // May occur if someone changes the config to no longer register the command.
         // Commands cannot be unregistered :/
-        if (!registerTransferCommand) {
-            source.sendMessage("This command is not enabled!");
+        if (!config.addTransferCommand()) {
+            source.sendMessage(languageManager.getLocaleString(source, "commands.not_enabled"));
             return;
         }
 
         switch (args.length) {
             case 0 -> {
-                source.sendMessage("No server specified! Correct usage: '/transfertool transfer <server>'");
-                if (mayTransferToAny(source)) {
-                    source.sendMessage("Alternatively, transfer to any server with '/transfertool transfer <ip> <port>'");
+                if (transferMappings.isEmpty() && !mayTransferToAny(source)) {
+                    source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.none_available"));
+                    return;
                 }
+
+                boolean mayTransferAny = mayTransferToAny(source);
+
+                SimpleForm.Builder builder = SimpleForm.builder();
+
+                builder.title(languageManager.getLocaleString(source, "menu.transfer.title"));
+
+                for (String shortcut : serverShortcuts.keySet()) {
+                    builder.optionalButton(shortcut, source.hasPermission("transfertool.shortcuts." + shortcut));
+                }
+
+                if (mayTransferAny) {
+                    builder.button(languageManager.getLocaleString(source, "menu.transfer.custom"));
+                }
+
+                builder.validResultHandler((form, resp) -> {
+                    // first: check if they chose the custom button?
+                    if (mayTransferAny && resp.clickedButtonId() == form.buttons().size() - 1) {
+                        source.sendForm(CustomForm.builder()
+                                        .title(languageManager.getLocaleString(source, "menu.transfer.custom.title"))
+                                        .input(languageManager.getLocaleString(source, "menu.transfer.custom.ip"),
+                                                languageManager.getLocaleString(source, "form.custom.ip.placeholder"))
+                                        .input(languageManager.getLocaleString(source, "menu.transfer.custom.port"),
+                                                "19132", "19132")
+                                        .validResultHandler(response ->
+                                                tryParseAndTransferAny(response.asInput(), response.asInput(), source))
+                                .build());
+                        return;
+                    }
+
+                    // or: send 'em
+                    transfer(source, serverShortcuts.get(resp.clickedButton().text()));
+                });
+
+                source.sendForm(builder);
             }
             case 1 -> {
                 String arg = args[0];
-                Destination destination = serverShortcuts.get(arg);
 
+                if (!source.hasPermission("transfertool.shortcuts." + arg)) {
+                    source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.no_permission")
+                            .formatted(arg));
+                    return;
+                }
+
+                Destination destination = serverShortcuts.get(arg);
                 if (destination == null) {
                     if (mayTransferToAny(source)) {
                         destination = Destination.fromCombined(arg, 19132, source::sendMessage);
                     } else {
-                        source.sendMessage("Unknown server %s!".formatted(arg));
+                        source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.not_found")
+                                .formatted(arg));
                         return;
                     }
                 }
@@ -127,34 +176,33 @@ public class TransferTool implements Extension {
             }
             case 2 -> {
                 if (!mayTransferToAny(source)) {
-                    source.sendMessage("Too many arguments! Correct usage: '/transfertool transfer <server>'");
+                    source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.too_many_args"));
                     return;
                 }
 
-                try {
-                    int port = Integer.parseInt(args[1]);
-                    Destination destination = new Destination(args[0], port);
-                    transfer(source, destination);
-                } catch (NumberFormatException e) {
-                    source.sendMessage("Invalid port! %s".formatted(args[1]));
-                }
+                tryParseAndTransferAny(args[0], args[1], source);
             }
             default -> {
-                source.sendMessage("Received too many arguments (%s)!".formatted(args.length));
-                source.sendMessage("Provided args: %s".formatted(Arrays.toString(args)));
+                source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.unknown_args").formatted(args.length));
+                source.sendMessage(languageManager.getLocaleString(source, "commands.transfer.args_provided").formatted(Arrays.toString(args)));
             }
         }
     }
 
     private void transfer(GeyserConnection source, Destination destination) {
         if (destination != null) {
-            if (destination.ip == null || destination.ip.isBlank()) {
-                source.sendMessage("Empty IP provided!");
+            if (destination.invalidIp()) {
+                source.sendMessage(languageManager.getLocaleString(source, "destination.ip.invalid"));
                 return;
             }
-            source.transfer(destination.ip, destination.port);
+
+            if (destination.invalidPort()) {
+                source.sendMessage(languageManager.getLocaleString(source, "destination.port.invalid"));
+                return;
+            }
+            source.transfer(destination.ip(), destination.port());
         } else {
-            source.sendMessage("Unknown destination!");
+            source.sendMessage(languageManager.getLocaleString(source, "destination.unknown"));
         }
     }
 
@@ -162,8 +210,27 @@ public class TransferTool implements Extension {
         return connection.hasPermission("transfertool.command.transfer.any");
     }
 
+    private void tryParseAndTransferAny(String ip, String port, GeyserConnection source) {
+        try {
+            int parsed = Integer.parseInt(port);
+            Destination destination = new Destination(ip, parsed);
+            transfer(source, destination);
+        } catch (NumberFormatException e) {
+            source.sendMessage(languageManager.getLocaleString(source, "destination.port.invalid")
+                    .formatted(port));
+        }
+    }
+
+    private void loadLanguageManager() {
+        try {
+            languageManager = new LanguageManager(dataFolder().resolve("translations"), config, logger);
+        } catch (Exception e) {
+            logger.error("Unable to load TransferTool language manager! " + e.getMessage());
+            this.disable();
+        }
+    }
+
     private void loadConfig() {
-        Config config;
         try {
             config = ConfigLoader.loadConfig(this);
         } catch (Exception e) {
@@ -172,67 +239,24 @@ public class TransferTool implements Extension {
             return;
         }
 
-        this.followJavaTransfer = config.isForwardOriginalTarget();
         Map<Destination, Destination> map = new HashMap<>();
 
-        for (Map.Entry<String, String> entry : config.getTransferMappings().entrySet()) {
+        for (Map.Entry<String, String> entry : config.transferMappings().entrySet()) {
             map.put(Destination.fromCombined(entry.getKey(), 25565),
                     Destination.fromCombined(entry.getValue(), 19132));
         }
 
         logger.info("Registered %s transfer mappings.".formatted(map.size()));
         this.transferMappings = map;
-        this.registerTransferCommand = config.isAddTransferCommand();
 
-        if (registerTransferCommand) {
+        if (config.addTransferCommand()) {
             Map<String, Destination> shortcuts = new HashMap<>();
-            for (Map.Entry<String, String> entry : config.getTransferShortcuts().entrySet()) {
+            for (Map.Entry<String, String> entry : config.transferShortcuts().entrySet()) {
                 shortcuts.put(entry.getKey(), Destination.fromCombined(entry.getValue(), 19132));
             }
 
             logger.info("Registered %s server name mappings.".formatted(shortcuts.size()));
             this.serverShortcuts = shortcuts;
-        }
-    }
-
-    private record Destination(String ip, int port) {
-
-        public static Destination fromCombined(String input, int fallbackPort) {
-            return fromCombined(input, fallbackPort, logger::error);
-        }
-
-        public static Destination fromCombined(String input, int fallbackPort, Consumer<String> caller) {
-            String ip = input;
-            int port = fallbackPort;
-
-            if (input.contains(":")) {
-                String parsePort;
-                if (input.startsWith("[")) {
-                    // Handle IPv6 addresses... since Bedrock technically supports these?
-                    int closingBracketIndex = input.indexOf("]");
-                    ip = input.substring(1, closingBracketIndex);
-                    parsePort = input.substring(closingBracketIndex + 2);
-                } else {
-                    // Handle IPv4 addresses or domain names
-                    int colonIndex = input.lastIndexOf(":");
-                    ip = input.substring(0, colonIndex);
-                    parsePort = input.substring(colonIndex + 1);
-                }
-
-                try {
-                    port = Integer.parseInt(parsePort);
-                } catch (NumberFormatException e) {
-                    caller.accept("Invalid port found: " + parsePort + " in input: " + input + "! " +
-                            "Defaulting to default port (" + fallbackPort + ").");
-                }
-            }
-
-            return new Destination(ip, port);
-        }
-
-        @Override
-        public String toString() {
-            return ip + ":" + port;
         }
     }
 }
